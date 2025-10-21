@@ -1,0 +1,132 @@
+version: "3.9"
+
+x-airflow-common:
+  &airflow-common
+  image: face-airflow:latest
+  environment:
+    &airflow-env
+    AIRFLOW_UID: ${AIRFLOW_UID}
+    AIRFLOW_GID: ${AIRFLOW_GID}
+    AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY}
+    AIRFLOW__CORE__LOAD_EXAMPLES: ${AIRFLOW__CORE__LOAD_EXAMPLES}
+    AIRFLOW__LOGGING__LOGGING_LEVEL: ${LOG_LEVEL}
+    _PIP_ADDITIONAL_REQUIREMENTS: ""
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags:rw
+    - ./airflow/logs:/opt/airflow/logs:rw
+    - ./airflow/plugins:/opt/airflow/plugins:rw
+    - ./airflow/scripts:/opt/airflow/scripts:rw
+    - ./airflow/utils:/opt/airflow/utils:rw
+  user: "${AIRFLOW_UID}:${AIRFLOW_GID}"
+  networks:
+    - facenet
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - facenet
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1g
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: airflow-init
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        airflow db init
+        airflow users create \
+          --username ${AIRFLOW_ADMIN_USER} \
+          --firstname ${AIRFLOW_ADMIN_FIRSTNAME} \
+          --lastname ${AIRFLOW_ADMIN_LASTNAME} \
+          --role Admin \
+          --email ${AIRFLOW_ADMIN_EMAIL} \
+          --password ${AIRFLOW_ADMIN_PASSWORD}
+        chown -R ${AIRFLOW_UID}:${AIRFLOW_GID} /opt/airflow/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "airflow db check"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: airflow-webserver
+    command: webserver
+    ports:
+      - "${AIRFLOW_WEBSERVER_PORT}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2g
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow-scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$(hostname)\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2g
+
+networks:
+  facenet:
+    driver: bridge
+
+volumes:
+  postgres-db:
+    name: postgres-db
