@@ -1,6 +1,6 @@
-apache-airflow-providers-amazon==9.1.0
-boto3==1.34.76
-pandas==2.2.2
-scikit-learn==1.5.2
-psycopg2-binary==2.9.9
-requests==2.32.3
+apache-airflow-providers-amazon
+boto3
+requests
+# Optional analytics libs; versions will be resolved by Airflow constraints
+pandas
+scikit-learn
