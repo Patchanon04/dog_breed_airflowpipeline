@@ -1,0 +1,9 @@
+# Ignore local deployment secrets and artifacts
+config.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Airflow runtime logs
+airflow/logs/
