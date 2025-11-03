@@ -14,9 +14,6 @@ CONFIG_FILE="${SCRIPT_DIR}/config.env"
 LOG_DIR_DEFAULT="/var/log/face-recognition"
 LOG_FILE="${LOG_DIR_DEFAULT}/deploy.log"
 DOCKER_DAEMON_JSON="/etc/docker/daemon.json"
-WEBHOOK_SERVICE_FILE="/etc/systemd/system/webhook-listener.service"
-WEBHOOK_WORKDIR="/opt/webhook-listener"
-WEBHOOK_VENV="${WEBHOOK_WORKDIR}/venv"
 REPO_DIR=""
 
 # ============================================
@@ -85,7 +82,7 @@ wait_for_webserver() {
 # Pre-flight Checks
 # ============================================
 preflight_checks() {
-  log "[1/9] Pre-flight Checks"
+  log "[1/8] Pre-flight Checks"
 
   # Check root/sudo
   if [ "$(id -u)" -ne 0 ]; then
@@ -105,7 +102,7 @@ preflight_checks() {
   set -a; source "${CONFIG_FILE}"; set +a
 
   # Ensure required vars
-  required_vars=(GIT_REPO GIT_BRANCH PROJECT_DIR AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION S3_BUCKET S3_PREFIX AIRFLOW_UID AIRFLOW_GID AIRFLOW__CORE__FERNET_KEY AIRFLOW__WEBSERVER__SECRET_KEY AIRFLOW_ADMIN_USER AIRFLOW_ADMIN_PASSWORD AIRFLOW_ADMIN_EMAIL AIRFLOW_WEBSERVER_PORT WEBHOOK_LISTENER_PORT WEBHOOK_SECRET LOG_LEVEL LOG_DIR)
+  required_vars=(GIT_REPO GIT_BRANCH PROJECT_DIR AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION S3_BUCKET S3_PREFIX AIRFLOW_UID AIRFLOW_GID AIRFLOW__CORE__FERNET_KEY AIRFLOW__WEBSERVER__SECRET_KEY AIRFLOW_ADMIN_USER AIRFLOW_ADMIN_PASSWORD AIRFLOW_ADMIN_EMAIL AIRFLOW_WEBSERVER_PORT LOG_LEVEL LOG_DIR)
   for v in "${required_vars[@]}"; do
     if [ -z "${!v:-}" ]; then
       log_error "Missing required variable in config.env: $v"
@@ -144,7 +141,7 @@ preflight_checks() {
 # System Preparation
 # ============================================
 system_prep() {
-  log "[2/9] System Preparation"
+  log "[2/8] System Preparation"
   export DEBIAN_FRONTEND=noninteractive
   retry 3 apt-get update -y
   retry 3 apt-get upgrade -y
@@ -210,7 +207,7 @@ EOF
 # Project Setup
 # ============================================
 project_setup() {
-  log "[3/9] Project Setup"
+  log "[3/8] Project Setup"
 
   mkdir -p "${REPO_DIR}"
   if [ ! -d "${REPO_DIR}/.git" ]; then
@@ -278,7 +275,7 @@ validate_project_structure() {
 # Docker Infrastructure
 # ============================================
 docker_infra() {
-  log "[4/9] Docker Infrastructure"
+  log "[4/8] Docker Infrastructure"
   pushd "${REPO_DIR}" >/dev/null
 
   # Build custom Airflow image
@@ -310,7 +307,7 @@ docker_infra() {
 # Airflow Services Deployment
 # ============================================
 deploy_airflow_services() {
-  log "[5/9] Airflow Services Deployment"
+  log "[5/8] Airflow Services Deployment"
   pushd "${REPO_DIR}" >/dev/null
 
   retry 3 docker compose up -d airflow-scheduler
@@ -355,90 +352,15 @@ dag_validation_and_trigger() {
 }
 
 # ============================================
-# Auto-Update Setup (Webhook)
-# ============================================
-setup_auto_update() {
-  log "[7/9] Auto-Update Setup"
-
-  mkdir -p "${WEBHOOK_WORKDIR}"
-  # Copy webhook script from bundle if present
-  if [ -f "${SCRIPT_DIR}/webhook_listener.py" ]; then
-    cp -f "${SCRIPT_DIR}/webhook_listener.py" "${WEBHOOK_WORKDIR}/webhook_listener.py"
-  else
-    log_error "webhook_listener.py not found in bundle"
-    exit 1
-  fi
-
-  # Python venv and deps
-  python3 -m venv "${WEBHOOK_VENV}"
-  "${WEBHOOK_VENV}/bin/pip" install --upgrade pip >/dev/null
-  "${WEBHOOK_VENV}/bin/pip" install flask >/dev/null
-
-  # Systemd service
-  cat > "${WEBHOOK_SERVICE_FILE}" <<EOF
-[Unit]
-Description=Webhook Listener for Auto-Update
-After=network.target docker.service
-Requires=docker.service
-
-[Service]
-Type=simple
-EnvironmentFile=${CONFIG_FILE}
-WorkingDirectory=${WEBHOOK_WORKDIR}
-ExecStart=${WEBHOOK_VENV}/bin/python ${WEBHOOK_WORKDIR}/webhook_listener.py
-Restart=always
-RestartSec=5
-StandardOutput=append:${LOG_DIR}/webhook.log
-StandardError=append:${LOG_DIR}/webhook.log
-User=root
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-  systemctl daemon-reload
-  systemctl enable webhook-listener
-  systemctl restart webhook-listener
-  sleep 2
-  systemctl --no-pager status webhook-listener || true
-
-  # Cron job fallback (disabled by default)
-  CRON_SCRIPT="/usr/local/bin/repo-autopull.sh"
-  cat > "${CRON_SCRIPT}" <<'EOS'
-#!/usr/bin/env bash
-set -euo pipefail
-source /etc/profile || true
-if [ -f "/etc/environment" ]; then
-  set -a; source /etc/environment; set +a
-fi
-if [ -f "/root/.bashrc" ]; then
-  source /root/.bashrc
-fi
-CONFIG_FILE="/root/config.env"
-if [ -f "$CONFIG_FILE" ]; then
-  set -a; source "$CONFIG_FILE"; set +a
-fi
-REPO_DIR="${PROJECT_DIR:-/home/ubuntu/face_recognition_project}"
-cd "$REPO_DIR"
-/usr/bin/git fetch --all
-/usr/bin/git reset --hard "origin/${GIT_BRANCH:-main}"
-/usr/bin/docker compose up -d --remove-orphans
-EOS
-  chmod +x "${CRON_SCRIPT}"
-  log_success "Webhook listener configured (systemd). Cron fallback script prepared but not scheduled."
-}
-
-# ============================================
 # Monitoring & Logging
 # ============================================
 monitoring_and_logging() {
-  log "[8/9] Monitoring & Logging"
+  log "[7/8] Monitoring & Logging"
 
   # Log rotation for our logs
   cat > /etc/logrotate.d/face-recognition <<EOF
 ${LOG_DIR}/*.log {
   daily
-  rotate 7
   compress
   missingok
   notifempty
@@ -457,7 +379,6 @@ EOF
   echo "Inbound Rules:" | tee -a "${LOG_FILE}"
   echo "  - Port 22   (SSH)         from YOUR_IP" | tee -a "${LOG_FILE}"
   echo "  - Port ${AIRFLOW_WEBSERVER_PORT} (Airflow UI)  from YOUR_IP" | tee -a "${LOG_FILE}"
-  echo "  - Port ${WEBHOOK_LISTENER_PORT} (Webhook)     from GitHub IPs" | tee -a "${LOG_FILE}"
   echo "" | tee -a "${LOG_FILE}"
   echo "AWS CLI command to open ports:" | tee -a "${LOG_FILE}"
   echo "aws ec2 authorize-security-group-ingress --group-id sg-xxxxx --protocol tcp --port ${AIRFLOW_WEBSERVER_PORT} --cidr YOUR_IP/32" | tee -a "${LOG_FILE}"
@@ -467,7 +388,7 @@ EOF
 # Final Verification & Summary
 # ============================================
 final_verification() {
-  log "[9/9] Final Verification"
+  log "[8/8] Final Verification"
 
   # Test Airflow UI
   if wait_for_webserver; then
@@ -488,8 +409,6 @@ final_verification() {
   P_HEALTH=$(docker inspect -f '{{json .State.Health.Status}}' postgres 2>/dev/null | tr -d '"' || echo "unknown")
   W_HEALTH=$(docker inspect -f '{{json .State.Health.Status}}' airflow-webserver 2>/dev/null | tr -d '"' || echo "unknown")
   S_STATE=$(docker inspect -f '{{.State.Status}}' airflow-scheduler 2>/dev/null || echo "unknown")
-  WEBHOOK_STATE=$(systemctl is-active webhook-listener || echo "unknown")
-
   cat <<EOF
 ╔═══════════════════════════════════════════════════════════════╗
 ║          Face Recognition Pipeline Deployed Successfully       ║
@@ -500,13 +419,10 @@ final_verification() {
    Username:        ${AIRFLOW_ADMIN_USER}
    Password:        ${AIRFLOW_ADMIN_PASSWORD}
    
-   Webhook:         http://${EC2_IP}:${WEBHOOK_LISTENER_PORT}/webhook
-   
 🐳 Docker Containers:
    ✓ postgres            [${P_HEALTH}]
    ✓ airflow-webserver   [${W_HEALTH}] 
    ✓ airflow-scheduler   [${S_STATE}]
-   ✓ webhook-listener    [${WEBHOOK_STATE}]
 
 🚀 DAG Status:
    Name: face_recognition_pipeline
@@ -521,21 +437,16 @@ final_verification() {
 📝 Logs:
    Deployment:  ${LOG_FILE}
    Airflow:     ${REPO_DIR}/airflow/logs/
-   Webhook:     ${LOG_DIR}/webhook.log
 
 🔍 Monitoring:
    Run: ${REPO_DIR}/monitor.sh
    
 📚 Next Steps:
-   1. Configure GitHub webhook: Settings → Webhooks → Add webhook
-      Payload URL: http://${EC2_IP}:${WEBHOOK_LISTENER_PORT}/webhook
-      Secret: <from config.env>
+   1. Monitor DAG: http://${EC2_IP}:${AIRFLOW_WEBSERVER_PORT}/dags/face_recognition_pipeline
       
-   2. Monitor DAG: http://${EC2_IP}:${AIRFLOW_WEBSERVER_PORT}/dags/face_recognition_pipeline
+   2. Check logs: docker compose logs -f
       
-   3. Check logs: docker compose logs -f
-      
-   4. Verify S3 uploads: aws s3 ls s3://${S3_BUCKET}/${S3_PREFIX}/models/
+   3. Verify S3 uploads: aws s3 ls s3://${S3_BUCKET}/${S3_PREFIX}/models/
 
 ⚠️  Important Notes:
    - Keep config.env secure (contains AWS keys)
@@ -555,7 +466,6 @@ main() {
   docker_infra
   deploy_airflow_services
   dag_validation_and_trigger
-  setup_auto_update
   monitoring_and_logging
   final_verification
   log_success "Deployment complete"

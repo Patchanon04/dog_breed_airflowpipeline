@@ -7,7 +7,6 @@ This guide describes how to deploy a production-ready Airflow-based Face Recogni
 - Security Group:
   - Inbound 22 (SSH) from your IP
   - Inbound 8081 (Airflow UI) from your IP
-  - Inbound 9000 (Webhook) from GitHub IPs
 - AWS CLI configured (access key, secret, region)
 - GitHub repo with pipeline code following the required structure
 
@@ -15,7 +14,6 @@ This guide describes how to deploy a production-ready Airflow-based Face Recogni
 - `deploy_ec2.sh` - main deployment script
 - `config.env` - configuration (keep secret!)
 - `docker-compose.yml` - Docker services
-- `webhook_listener.py` - auto-update via GitHub webhook
 - `monitor.sh` - real-time monitoring
 
 ## Quick Start
@@ -23,12 +21,6 @@ This guide describes how to deploy a production-ready Airflow-based Face Recogni
 sudo chmod +x deploy_ec2.sh monitor.sh
 sudo ./deploy_ec2.sh
 ```
-
-## Configure GitHub Webhook
-- Payload URL: `http://<EC2_PUBLIC_IP>:9000/webhook`
-- Content type: `application/json`
-- Secret: from `config.env` as `WEBHOOK_SECRET`
-- Event: `Just the push event`
 
 ## S3 Structure
 - `s3://<S3_BUCKET>/<S3_PREFIX>/raw/`
@@ -38,13 +30,11 @@ sudo ./deploy_ec2.sh
 ## Troubleshooting
 - Logs
   - Deployment: `/var/log/face-recognition/deploy.log`
-  - Webhook: `/var/log/face-recognition/webhook.log`
   - Airflow: `<PROJECT_DIR>/airflow/logs/`
 - Restart services
 ```bash
 docker compose ps
 docker compose logs -f airflow-webserver airflow-scheduler postgres
-systemctl status webhook-listener
 docker compose restart airflow-webserver airflow-scheduler
 ```
 
