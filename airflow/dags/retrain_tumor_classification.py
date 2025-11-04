@@ -15,13 +15,13 @@ DEFAULT_ARGS = {
 }
 
 with DAG(
-    dag_id="face_recognition_pipeline",
+    dag_id="retrain_tumor_classification",
     default_args=DEFAULT_ARGS,
-    description="Face recognition end-to-end pipeline",
+    description="Retrain tumor classification end-to-end pipeline",
     schedule_interval=None,
     start_date=datetime(2024, 1, 1),
     catchup=False,
-    tags=["facerec"],
+    tags=["healthcare"],
 ) as dag:
 
     env_exports = "export PYTHONUNBUFFERED=1; "
