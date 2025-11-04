@@ -3,8 +3,8 @@ import os
 from utils.s3_helper import get_s3_client
 
 BUCKET = os.environ.get("S3_BUCKET")
-PREFIX = os.environ.get("S3_PREFIX", "facerec")
-MODEL_NAME = os.environ.get("MODEL_NAME", "face_recognition_model")
+PREFIX = os.environ.get("S3_PREFIX", "retrain-brain-tumor-model")
+MODEL_NAME = os.environ.get("MODEL_NAME", "retrain_brain_tumor_model")
 MODEL_VERSION = os.environ.get("MODEL_VERSION", "v1.0")
 
 print("[deploy_model] Uploading artifact to S3...")

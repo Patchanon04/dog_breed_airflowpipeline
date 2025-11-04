@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# deploy_ec2.sh - Production-ready deployment for Face Recognition Pipeline on EC2 Ubuntu 22.04
+# deploy_ec2.sh - Production-ready deployment for Retrain Brain Tumor Model Pipeline on EC2 Ubuntu 22.04
 # Usage: sudo ./deploy_ec2.sh
 
 set -e
@@ -11,7 +11,7 @@ set -u
 # ============================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/config.env"
-LOG_DIR_DEFAULT="/var/log/face-recognition"
+LOG_DIR_DEFAULT="/var/log/retrain-brain-tumor-model"
 LOG_FILE="${LOG_DIR_DEFAULT}/deploy.log"
 DOCKER_DAEMON_JSON="/etc/docker/daemon.json"
 REPO_DIR=""
@@ -253,7 +253,7 @@ validate_project_structure() {
     "docker-compose.yml"
     "airflow/Dockerfile"
     "airflow/requirements.txt"
-    "airflow/dags/face_recognition_pipeline.py"
+    "airflow/dags/retrain_tumor_classification.py"
     "airflow/scripts/load_data.py"
     "airflow/scripts/clean_data.py"
     "airflow/scripts/train_model.py"
@@ -280,11 +280,11 @@ docker_infra() {
 
   # Build custom Airflow image
   log "Building Airflow image"
-  retry 3 docker build -t face-airflow:latest -f airflow/Dockerfile airflow
+  retry 3 docker build -t retrain-brain-tumor-airflow:latest -f airflow/Dockerfile airflow
   log_success "Airflow image built"
 
   # Create network (compose will create automatically, but ensure base network exists)
-  docker network inspect facenet >/dev/null 2>&1 || docker network create facenet || true
+  docker network inspect retrain-brain-tumor-net >/dev/null 2>&1 || docker network create retrain-brain-tumor-net || true
 
   # Create volumes
   docker volume inspect postgres-db >/dev/null 2>&1 || docker volume create postgres-db >/dev/null
@@ -336,19 +336,19 @@ dag_validation_and_trigger() {
     exit 1
   fi
 
-  # Validate face_recognition_pipeline exists
-  if ! docker exec airflow-webserver airflow dags list | awk '{print $1}' | grep -q '^face_recognition_pipeline$'; then
-    log_error "DAG 'face_recognition_pipeline' not found"
+  # Validate retrain_tumor_classification exists
+  if ! docker exec airflow-webserver airflow dags list | awk '{print $1}' | grep -q '^retrain_tumor_classification$'; then
+    log_error "DAG 'retrain_tumor_classification' not found"
     exit 1
   fi
-  log_success "DAG exists: face_recognition_pipeline"
+  log_success "DAG exists: retrain_tumor_classification"
 
   # Unpause DAG
-  docker exec airflow-webserver airflow dags unpause face_recognition_pipeline || true
+  docker exec airflow-webserver airflow dags unpause retrain_tumor_classification || true
   # Trigger DAG
-  docker exec airflow-webserver airflow dags trigger face_recognition_pipeline || true
+  docker exec airflow-webserver airflow dags trigger retrain_tumor_classification || true
   sleep 5
-  docker exec airflow-webserver airflow dags list-runs -d face_recognition_pipeline --limit 5 || true
+  docker exec airflow-webserver airflow dags list-runs -d retrain_tumor_classification --limit 5 || true
 }
 
 # ============================================
@@ -358,7 +358,7 @@ monitoring_and_logging() {
   log "[7/8] Monitoring & Logging"
 
   # Log rotation for our logs
-  cat > /etc/logrotate.d/face-recognition <<EOF
+  cat > /etc/logrotate.d/retrain-brain-tumor-model <<EOF
 ${LOG_DIR}/*.log {
   daily
   compress
@@ -402,8 +402,8 @@ final_verification() {
   EC2_IP=$(curl -fs http://169.254.169.254/latest/meta-data/public-ipv4 || echo "<EC2_PUBLIC_IP>")
 
   # DAG run status
-  DAG_STATUS=$(docker exec airflow-webserver bash -lc "airflow dags list-runs -d face_recognition_pipeline --limit 1 | tail -n +3 | awk '{print \$6}'" || echo "unknown")
-  DAG_START=$(docker exec airflow-webserver bash -lc "airflow dags list-runs -d face_recognition_pipeline --limit 1 | tail -n +3 | awk '{print \$2,\$3}'" || echo "-")
+  DAG_STATUS=$(docker exec airflow-webserver bash -lc "airflow dags list-runs -d retrain_tumor_classification --limit 1 | tail -n +3 | awk '{print \$6}'" || echo "unknown")
+  DAG_START=$(docker exec airflow-webserver bash -lc "airflow dags list-runs -d retrain_tumor_classification --limit 1 | tail -n +3 | awk '{print \$2,\$3}'" || echo "-")
 
   # Containers health
   P_HEALTH=$(docker inspect -f '{{json .State.Health.Status}}' postgres 2>/dev/null | tr -d '"' || echo "unknown")
@@ -411,7 +411,7 @@ final_verification() {
   S_STATE=$(docker inspect -f '{{.State.Status}}' airflow-scheduler 2>/dev/null || echo "unknown")
   cat <<EOF
 ╔═══════════════════════════════════════════════════════════════╗
-║          Face Recognition Pipeline Deployed Successfully       ║
+║     Retrain Brain Tumor Model Pipeline Deployed Successfully   ║
 ╚═══════════════════════════════════════════════════════════════╝
 
 📊 Access URLs:
@@ -425,7 +425,7 @@ final_verification() {
    ✓ airflow-scheduler   [${S_STATE}]
 
 🚀 DAG Status:
-   Name: face_recognition_pipeline
+   Name: retrain_tumor_classification
    State: ${DAG_STATUS}
    Start Time: ${DAG_START}
    
@@ -442,7 +442,7 @@ final_verification() {
    Run: ${REPO_DIR}/monitor.sh
    
 📚 Next Steps:
-   1. Monitor DAG: http://${EC2_IP}:${AIRFLOW_WEBSERVER_PORT}/dags/face_recognition_pipeline
+   1. Monitor DAG: http://${EC2_IP}:${AIRFLOW_WEBSERVER_PORT}/dags/retrain_tumor_classification
       
    2. Check logs: docker compose logs -f
       

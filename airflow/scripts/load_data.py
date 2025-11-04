@@ -4,7 +4,7 @@ import sys
 from utils.s3_helper import get_s3_client
 
 BUCKET = os.environ.get("S3_BUCKET")
-PREFIX = os.environ.get("S3_PREFIX", "facerec")
+PREFIX = os.environ.get("S3_PREFIX", "retrain-brain-tumor-model")
 
 
 def main():

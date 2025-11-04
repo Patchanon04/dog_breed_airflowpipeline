@@ -2,7 +2,7 @@ version: "3.9"
 
 x-airflow-common:
   &airflow-common
-  image: face-airflow:latest
+  image: retrain-brain-tumor-airflow:latest
   environment:
     &airflow-env
     AIRFLOW_UID: ${AIRFLOW_UID}
@@ -22,7 +22,7 @@ x-airflow-common:
     - ./airflow/utils:/opt/airflow/utils:rw
   user: "${AIRFLOW_UID}:${AIRFLOW_GID}"
   networks:
-    - facenet
+    - retrain-brain-tumor-net
   depends_on:
     postgres:
       condition: service_healthy
@@ -46,7 +46,7 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - facenet
+      - retrain-brain-tumor-net
     deploy:
       resources:
         limits:
@@ -124,7 +124,7 @@ services:
           memory: 2g
 
 networks:
-  facenet:
+  retrain-brain-tumor-net:
     driver: bridge
 
 volumes:
