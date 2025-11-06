@@ -4,3 +4,8 @@ requests
 # Optional analytics libs; versions will be resolved by Airflow constraints
 pandas
 scikit-learn
+torch
+torchvision
+matplotlib
+seaborn
+Pillow
