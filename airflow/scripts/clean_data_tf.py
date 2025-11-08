@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare TensorFlow-compatible dataset splits for retraining pipeline line 2."""
+"""ทำความสะอาดและเตรียม train/val/test split สำหรับ TensorFlow pipeline."""
 
 from __future__ import annotations
 
@@ -36,20 +36,21 @@ def _get_int(name: str, default: int) -> int:
     return int(value)
 
 
+def _as_bool(value: str | None, default: bool = True) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def main() -> None:
     dataset_dir = resolve_dataset_dir()
     output_dir = resolve_output_dir()
 
-    write_report = os.environ.get("TF_CLEAN_WRITE_REPORT", "true").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    write_report = _as_bool(os.environ.get("TF_CLEAN_WRITE_REPORT"), True)
 
-    print(f"[prepare_tf_split] Cleaning dataset at {dataset_dir}")
+    print(f"[clean_data_tf] Cleaning dataset at {dataset_dir}")
     clean_stats = clean_corrupted_images(dataset_dir, write_report=write_report)
-    print(f"[prepare_tf_split] Cleaning stats: {json.dumps(clean_stats)}")
+    print(f"[clean_data_tf] Cleaning stats: {json.dumps(clean_stats)}")
 
     train_ratio = _get_float("TF_TRAIN_RATIO", DEFAULT_TRAIN_RATIO)
     val_ratio = _get_float("TF_VAL_RATIO", DEFAULT_VAL_RATIO)
@@ -66,13 +67,13 @@ def main() -> None:
             seed=seed,
         )
     except ValueError as exc:
-        print(f"[prepare_tf_split] Failed: {exc}", file=sys.stderr)
+        print(f"[clean_data_tf] Failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    print("[prepare_tf_split] Completed dataset split")
+    print("[clean_data_tf] Completed dataset split")
     print(json.dumps(manifest, indent=2))
     manifest_path = output_dir / TF_SPLIT_MANIFEST
-    print(f"[prepare_tf_split] Manifest saved to {manifest_path}")
+    print(f"[clean_data_tf] Manifest saved to {manifest_path}")
 
 
 if __name__ == "__main__":

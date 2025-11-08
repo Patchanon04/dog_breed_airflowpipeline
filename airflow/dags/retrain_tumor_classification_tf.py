@@ -35,12 +35,7 @@ with DAG(
 
     clean_data = BashOperator(
         task_id="clean_data",
-        bash_command=env_exports + "python /opt/airflow/scripts/clean_data.py",
-    )
-
-    prepare_tf_split = BashOperator(
-        task_id="prepare_tf_split",
-        bash_command=env_exports + "python /opt/airflow/scripts/prepare_tf_split.py",
+        bash_command=env_exports + "python /opt/airflow/scripts/clean_data_tf.py",
     )
 
     train_model_tf = BashOperator(
@@ -58,4 +53,9 @@ with DAG(
         bash_command=env_exports + "python /opt/airflow/scripts/test_model_tf.py",
     )
 
-    load_data >> clean_data >> prepare_tf_split >> train_model_tf >> evaluate_model_tf >> test_model_tf
+    deploy_model_tf = BashOperator(
+        task_id="deploy_model_tf",
+        bash_command=env_exports + "python /opt/airflow/scripts/deploy_model_tf.py",
+    )
+
+    load_data >> clean_data >> train_model_tf >> evaluate_model_tf >> test_model_tf >> deploy_model_tf
